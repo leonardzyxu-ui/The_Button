@@ -190,7 +190,7 @@ input:focus {
   align-content: center;
   gap: 2px;
   padding: 34px;
-  border-radius: 34%;
+  border-radius: 50%;
   color: #fff;
   background:
     radial-gradient(circle at 38% 28%, #ff4444 0%, #f51919 36%, #c61116 72%, #81080c 100%);
@@ -405,7 +405,7 @@ input:focus {
 .mini-nuke {
   width: 104px;
   aspect-ratio: 1;
-  border-radius: 34%;
+  border-radius: 50%;
   color: #fff;
   background: radial-gradient(circle at 38% 28%, #ff4444 0%, #f51919 44%, #9f0e12 100%);
   border: 3px solid #ff3737;
@@ -486,4 +486,3 @@ input:focus {
     padding: 54px 22px 28px;
   }
 }
-

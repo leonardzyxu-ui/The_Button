@@ -46,22 +46,61 @@ final class MacNotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    func deliver(title: String, body: String) {
+    func deliver(title: String, body: String, completion: ((Bool, String) -> Void)? = nil) {
         center.getNotificationSettings { [center] settings in
-            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
-                return
+            switch settings.authorizationStatus {
+            case .authorized, .provisional:
+                self.addNotification(center: center, title: title, body: body, completion: completion)
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                    if let error {
+                        DispatchQueue.main.async {
+                            completion?(false, error.localizedDescription)
+                        }
+                    } else if granted {
+                        self.addNotification(center: center, title: title, body: body, completion: completion)
+                    } else {
+                        DispatchQueue.main.async {
+                            completion?(false, "Notifications were not allowed.")
+                        }
+                    }
+                }
+            case .denied:
+                DispatchQueue.main.async {
+                    completion?(false, "Notifications are blocked in System Settings.")
+                }
+            @unknown default:
+                DispatchQueue.main.async {
+                    completion?(false, "Could not read notification permission.")
+                }
             }
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = body
-            content.sound = .default
-            content.threadIdentifier = "the-button"
-            let request = UNNotificationRequest(
-                identifier: "the-button-\(UUID().uuidString)",
-                content: content,
-                trigger: nil
-            )
-            center.add(request)
+        }
+    }
+
+    private func addNotification(
+        center: UNUserNotificationCenter,
+        title: String,
+        body: String,
+        completion: ((Bool, String) -> Void)?
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.threadIdentifier = "the-button"
+        let request = UNNotificationRequest(
+            identifier: "the-button-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        center.add(request) { error in
+            DispatchQueue.main.async {
+                if let error {
+                    completion?(false, error.localizedDescription)
+                } else {
+                    completion?(true, "Notification sent.")
+                }
+            }
         }
     }
 
@@ -84,4 +123,3 @@ final class MacNotificationService: NSObject, UNUserNotificationCenterDelegate {
         completionHandler()
     }
 }
-

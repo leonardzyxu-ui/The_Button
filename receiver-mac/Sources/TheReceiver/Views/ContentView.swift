@@ -56,6 +56,18 @@ struct ContentView: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                Button {
+                    store.sendTestNotification()
+                } label: {
+                    Label("Test Notification", systemImage: "bell.badge")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Text(store.notificationStatus)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
                 Text("v0.1.0")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -208,6 +220,10 @@ struct ReceiverSettingsView: View {
 
                 Button("Enable Notifications") {
                     store.requestNotifications()
+                }
+
+                Button("Test Notification") {
+                    store.sendTestNotification()
                 }
             }
 
@@ -474,4 +490,3 @@ private func shortTime(_ iso: String) -> String {
     }
     return iso
 }
-

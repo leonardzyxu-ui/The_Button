@@ -63,12 +63,16 @@ else
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$APP_NAME</string>
+  <key>CFBundleDisplayName</key>
+  <string>$APP_NAME</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>NSUserNotificationAlertStyle</key>
+  <string>alert</string>
 </dict>
 </plist>
 PLIST
@@ -115,4 +119,3 @@ case "$MODE" in
     exit 2
     ;;
 esac
-

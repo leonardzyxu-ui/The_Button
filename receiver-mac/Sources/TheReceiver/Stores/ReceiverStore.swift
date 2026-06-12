@@ -88,6 +88,13 @@ final class ReceiverStore: ObservableObject {
         }
     }
 
+    func sendTestNotification() {
+        deliverNotification(
+            title: "The Button",
+            body: "Test notification from The Receiver."
+        )
+    }
+
     func sendReply(_ text: String) {
         guard let device = selectedDevice else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -121,7 +128,7 @@ final class ReceiverStore: ObservableObject {
         if let message = envelope.message {
             appendMessage(message)
             if message.from == "user" {
-                MacNotificationService.shared.deliver(
+                deliverNotification(
                     title: "The Button",
                     body: "\(message.displayName): \(message.text)"
                 )
@@ -160,15 +167,23 @@ final class ReceiverStore: ObservableObject {
     private func notify(for event: ButtonEvent) {
         switch event.type {
         case "press":
-            MacNotificationService.shared.deliver(title: "The Button", body: event.text)
+            deliverNotification(title: "The Button", body: event.text)
         case "message":
-            MacNotificationService.shared.deliver(title: "Message Leo", body: event.text)
+            deliverNotification(title: "Message Leo", body: event.text)
         case "nuke":
-            MacNotificationService.shared.deliver(title: "The Nuke", body: event.text)
+            deliverNotification(title: "The Nuke", body: event.text)
             NSApp.activate(ignoringOtherApps: true)
             onNuke?(event.displayName)
         default:
             break
+        }
+    }
+
+    private func deliverNotification(title: String, body: String) {
+        MacNotificationService.shared.deliver(title: title, body: body) { [weak self] success, message in
+            Task { @MainActor in
+                self?.notificationStatus = success ? "Last notification sent." : message
+            }
         }
     }
 }
