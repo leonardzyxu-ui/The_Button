@@ -18,6 +18,8 @@ const MAX_EVENTS = 300;
 const MAX_MESSAGES = 600;
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGE_CHARS = 1200;
+const MAX_NUKE_MESSAGE_CHARS = 240;
+const RECEIVER_ACK_TIMEOUT_MS = 2500;
 
 export function createTheButtonServer(options = {}) {
   const store = options.store || createStoreFromEnv();
@@ -26,6 +28,7 @@ export function createTheButtonServer(options = {}) {
   const siteSockets = new Map();
   const socketDevices = new Map();
   const receiverSockets = new Set();
+  const pendingEventAcks = new Map();
   const siteWSS = new WebSocketServer({ noServer: true });
   const receiverWSS = new WebSocketServer({ noServer: true });
 
@@ -35,7 +38,8 @@ export function createTheButtonServer(options = {}) {
     rateLimiter,
     siteSockets,
     socketDevices,
-    receiverSockets
+    receiverSockets,
+    pendingEventAcks
   };
 
   const server = createServer(async (request, response) => {
@@ -207,6 +211,11 @@ async function handleEvent(request, response, context) {
     sendJSON(response, { error: "Type yes to confirm The Nuke." }, 400);
     return;
   }
+  const nukeMessage = eventType === "nuke" ? sanitizeNukeMessage(body?.message) : "";
+  if (eventType === "nuke" && nukeMessage == null) {
+    sendJSON(response, { error: "Nuke message is too long." }, 400);
+    return;
+  }
 
   const state = await context.store.getState();
   const fresh = state.devices[device.deviceId];
@@ -231,12 +240,14 @@ async function handleEvent(request, response, context) {
     displayName: fresh.displayName,
     text: eventType === "press"
       ? `${fresh.displayName} pressed the big red button.`
-      : `${fresh.displayName} has nuked you.`
+      : nukeText(fresh.displayName, nukeMessage),
+    ...(eventType === "nuke" && nukeMessage ? { nukeMessage } : {})
   });
+  const deliveredToReceiver = waitForReceiverEventAck(context, event.id);
   await context.store.setState(state);
 
   broadcastReceivers(context, { type: "event", event, snapshot: receiverSnapshot(state, context) });
-  sendJSON(response, { ok: true, event });
+  sendJSON(response, { ok: true, event, deliveredToReceiver: await deliveredToReceiver });
 }
 
 async function handleMessage(request, response, context) {
@@ -378,6 +389,11 @@ async function handleReceiverSocketMessage(socket, data, context) {
   const message = JSON.parse(String(data));
   if (message.type === "ping") {
     safeSend(socket, { type: "pong", at: new Date().toISOString() });
+    return;
+  }
+
+  if (message.type === "eventReceived") {
+    acknowledgeReceiverEvent(context, message.eventId);
     return;
   }
 
@@ -691,6 +707,11 @@ function cleanDeviceID(value) {
   return /^btn_[A-Za-z0-9_-]{12,64}$/.test(text) ? text : "";
 }
 
+function cleanEventID(value) {
+  const text = String(value || "").trim();
+  return /^evt_[A-Za-z0-9_-]{12,64}$/.test(text) ? text : "";
+}
+
 function sanitizeDisplayName(value) {
   const text = String(value || "")
     .replace(/[\u0000-\u001f\u007f]/g, "")
@@ -704,6 +725,49 @@ function sanitizeMessage(value) {
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
     .trim();
   return text.length > 0 && text.length <= MAX_MESSAGE_CHARS ? text : "";
+}
+
+function sanitizeNukeMessage(value) {
+  const text = String(value || "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) {
+    return "";
+  }
+  return text.length <= MAX_NUKE_MESSAGE_CHARS ? text : null;
+}
+
+function nukeText(displayName, message) {
+  return message ? `${displayName} has nuked you: ${message}` : `${displayName} has nuked you.`;
+}
+
+function waitForReceiverEventAck(context, eventId) {
+  if (context.receiverSockets.size === 0) {
+    return Promise.resolve(false);
+  }
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = delivered => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      context.pendingEventAcks.delete(eventId);
+      resolve(delivered);
+    };
+    const timeout = setTimeout(() => finish(false), RECEIVER_ACK_TIMEOUT_MS);
+    context.pendingEventAcks.set(eventId, finish);
+  });
+}
+
+function acknowledgeReceiverEvent(context, eventId) {
+  const clean = cleanEventID(eventId);
+  if (!clean) {
+    return;
+  }
+  context.pendingEventAcks.get(clean)?.(true);
 }
 
 function normalizeCounts(value) {

@@ -48,14 +48,16 @@ func testDecodesNukeEventEnvelope() throws {
         "type": "nuke",
         "deviceId": "btn_abc",
         "displayName": "Alex",
-        "text": "Alex has nuked you."
+        "text": "Alex has nuked you: Please look at the laptop.",
+        "nukeMessage": "Please look at the laptop."
       }
     }
     """.data(using: .utf8)!
 
     let envelope = try JSONDecoder().decode(ReceiverEnvelope.self, from: json)
     try check(envelope.event?.type == "nuke", "nuke event type did not decode")
-    try check(envelope.event?.text == "Alex has nuked you.", "nuke event text did not decode")
+    try check(envelope.event?.text == "Alex has nuked you: Please look at the laptop.", "nuke event text did not decode")
+    try check(envelope.event?.nukeMessage == "Please look at the laptop.", "nuke message did not decode")
 }
 
 func testBuildsReceiverWebSocketURL() throws {
@@ -87,4 +89,3 @@ if !failures.isEmpty {
 }
 
 print("All TheReceiver checks passed.")
-

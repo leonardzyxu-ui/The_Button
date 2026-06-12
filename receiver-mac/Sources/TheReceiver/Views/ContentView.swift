@@ -3,6 +3,7 @@ import TheReceiverCore
 
 struct ContentView: View {
     @EnvironmentObject private var store: ReceiverStore
+    @State private var selectedSection: ReceiverSection = .dashboard
     @State private var replyDraft = ""
     @State private var showingPermanentDelete = false
 
@@ -21,10 +22,7 @@ struct ContentView: View {
         HStack(spacing: 0) {
             sidebar
             Divider()
-            VStack(spacing: 12) {
-                topGrid
-                conversationPane
-            }
+            content
             .padding(14)
             .background(Color(red: 0.04, green: 0.06, blue: 0.08))
         }
@@ -40,10 +38,36 @@ struct ContentView: View {
                 .font(.system(size: 24, weight: .bold))
                 .padding(.bottom, 12)
 
-            SidebarButton(title: "Dashboard", systemImage: "speedometer", selected: true)
-            SidebarButton(title: "Requests", systemImage: "tray.full", badge: deletedCount)
-            SidebarButton(title: "Conversations", systemImage: "bubble.left.and.bubble.right")
-            SidebarButton(title: "Settings", systemImage: "gearshape")
+            SidebarButton(
+                title: "Dashboard",
+                systemImage: "speedometer",
+                selected: selectedSection == .dashboard
+            ) {
+                selectedSection = .dashboard
+            }
+            SidebarButton(
+                title: "Requests",
+                systemImage: "tray.full",
+                selected: selectedSection == .requests,
+                badge: deletedCount
+            ) {
+                selectedSection = .requests
+                store.selectedDeviceID = deletedDevices.first?.deviceId ?? store.selectedDeviceID
+            }
+            SidebarButton(
+                title: "Conversations",
+                systemImage: "bubble.left.and.bubble.right",
+                selected: selectedSection == .conversations
+            ) {
+                selectedSection = .conversations
+            }
+            SidebarButton(
+                title: "Settings",
+                systemImage: "gearshape",
+                selected: selectedSection == .settings
+            ) {
+                selectedSection = .settings
+            }
 
             Spacer()
 
@@ -76,6 +100,23 @@ struct ContentView: View {
         .padding(16)
         .frame(width: 190)
         .background(Color(red: 0.035, green: 0.05, blue: 0.065))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch selectedSection {
+        case .dashboard:
+            VStack(spacing: 12) {
+                topGrid
+                conversationPane
+            }
+        case .requests:
+            requestsView
+        case .conversations:
+            conversationsView
+        case .settings:
+            settingsView
+        }
     }
 
     private var topGrid: some View {
@@ -119,6 +160,64 @@ struct ContentView: View {
             }
         }
         .frame(minHeight: 260)
+    }
+
+    private var requestsView: some View {
+        HStack(spacing: 12) {
+            Panel(title: "Requests \(deletedDevices.isEmpty ? "" : "•")") {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if deletedDevices.isEmpty {
+                            EmptyPanelText("No requests.")
+                        } else {
+                            ForEach(deletedDevices) { device in
+                                DeviceRow(device: device, selected: store.selectedDeviceID == device.deviceId) {
+                                    store.selectedDeviceID = device.deviceId
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(minWidth: 280)
+
+            conversationPane
+        }
+    }
+
+    private var conversationsView: some View {
+        HStack(spacing: 12) {
+            Panel(title: "Conversations") {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if store.activeDevices.isEmpty {
+                            EmptyPanelText("No conversations.")
+                        } else {
+                            ForEach(store.activeDevices) { device in
+                                ConversationRow(
+                                    device: device,
+                                    preview: lastPreview(for: device.deviceId),
+                                    selected: store.selectedDeviceID == device.deviceId
+                                ) {
+                                    store.selectedDeviceID = device.deviceId
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(minWidth: 280)
+
+            conversationPane
+        }
+    }
+
+    private var settingsView: some View {
+        Panel(title: "Settings") {
+            ReceiverSettingsView()
+                .environmentObject(store)
+                .padding(18)
+        }
     }
 
     private var conversationPane: some View {
@@ -178,13 +277,24 @@ struct ContentView: View {
     }
 
     private var deletedCount: Int? {
-        let count = store.devices.filter { $0.status == "deleted" }.count
+        let count = deletedDevices.count
         return count > 0 ? count : nil
+    }
+
+    private var deletedDevices: [ButtonDevice] {
+        store.devices.filter { $0.status == "deleted" }
     }
 
     private func lastPreview(for deviceId: String) -> String {
         store.messages.last { $0.deviceId == deviceId }?.text ?? "No messages yet"
     }
+}
+
+private enum ReceiverSection {
+    case dashboard
+    case requests
+    case conversations
+    case settings
 }
 
 struct ReceiverSettingsView: View {
@@ -283,24 +393,44 @@ private struct SidebarButton: View {
     let systemImage: String
     var selected = false
     var badge: Int?
+    let action: () -> Void
 
     var body: some View {
-        HStack {
-            Image(systemName: systemImage)
-                .frame(width: 20)
-            Text(title)
-            Spacer()
-            if let badge {
-                Text(String(badge))
-                    .font(.caption.bold())
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Color.blue, in: Capsule())
+        Button(action: action) {
+            HStack {
+                Image(systemName: systemImage)
+                    .frame(width: 20)
+                Text(title)
+                Spacer()
+                if let badge {
+                    Text(String(badge))
+                        .font(.caption.bold())
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.blue, in: Capsule())
+                }
             }
+            .padding(.horizontal, 10)
+            .frame(height: 38)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 10)
-        .frame(height: 38)
+        .buttonStyle(.plain)
         .background(selected ? Color.white.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct EmptyPanelText: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 18)
     }
 }
 

@@ -30,7 +30,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -115,7 +116,24 @@ input {
   outline: none;
 }
 
+textarea {
+  width: 100%;
+  min-height: 104px;
+  padding: 12px 13px;
+  color: var(--text);
+  background: rgba(4, 8, 12, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  outline: none;
+  resize: vertical;
+}
+
 input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59, 147, 255, 0.18);
+}
+
+textarea:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(59, 147, 255, 0.18);
 }

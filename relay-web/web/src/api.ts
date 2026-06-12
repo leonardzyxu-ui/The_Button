@@ -1,4 +1,4 @@
-import type { ConversationMessage, DeviceSession, JoinResponse } from "./types";
+import type { ButtonEventResponse, ConversationMessage, DeviceSession, JoinResponse } from "./types";
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(path, {
@@ -26,7 +26,7 @@ export function joinDevice(input: {
   });
 }
 
-export function pressButton(session: DeviceSession): Promise<{ ok: true }> {
+export function pressButton(session: DeviceSession): Promise<ButtonEventResponse> {
   return postJSON("/api/events", {
     deviceId: session.deviceId,
     deviceSecret: session.deviceSecret,
@@ -34,12 +34,13 @@ export function pressButton(session: DeviceSession): Promise<{ ok: true }> {
   });
 }
 
-export function sendNuke(session: DeviceSession): Promise<{ ok: true }> {
+export function sendNuke(session: DeviceSession, message: string): Promise<ButtonEventResponse> {
   return postJSON("/api/events", {
     deviceId: session.deviceId,
     deviceSecret: session.deviceSecret,
     eventType: "nuke",
-    confirm: "yes"
+    confirm: "yes",
+    message
   });
 }
 
@@ -58,4 +59,3 @@ export function siteWebSocketURL(session: DeviceSession): string {
   url.searchParams.set("deviceSecret", session.deviceSecret);
   return url.toString();
 }
-

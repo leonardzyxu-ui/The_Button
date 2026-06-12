@@ -24,6 +24,22 @@ export interface ConversationMessage {
   text: string;
 }
 
+export interface ButtonEvent {
+  id: string;
+  createdAt: string;
+  type: "press" | "message" | "nuke";
+  deviceId: string;
+  displayName: string;
+  text: string;
+  nukeMessage?: string;
+}
+
+export interface ButtonEventResponse {
+  ok: true;
+  event: ButtonEvent;
+  deliveredToReceiver: boolean;
+}
+
 export interface DeviceSession {
   deviceId: string;
   deviceSecret: string;
@@ -57,4 +73,3 @@ export type SiteSocketMessage =
   | { type: "banned"; deviceId: string }
   | { type: "error"; message: string }
   | { type: "pong"; at: string };
-

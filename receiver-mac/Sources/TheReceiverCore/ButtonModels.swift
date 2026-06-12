@@ -51,14 +51,16 @@ public struct ButtonEvent: Codable, Identifiable, Equatable {
     public let deviceId: String
     public let displayName: String
     public let text: String
+    public let nukeMessage: String?
 
-    public init(id: String, createdAt: String, type: String, deviceId: String, displayName: String, text: String) {
+    public init(id: String, createdAt: String, type: String, deviceId: String, displayName: String, text: String, nukeMessage: String? = nil) {
         self.id = id
         self.createdAt = createdAt
         self.type = type
         self.deviceId = deviceId
         self.displayName = displayName
         self.text = text
+        self.nukeMessage = nukeMessage
     }
 }
 
@@ -157,12 +159,14 @@ public struct ReceiverEnvelope: Decodable {
 public struct ReceiverOutbound: Encodable, Equatable {
     public let type: String
     public let deviceId: String?
+    public let eventId: String?
     public let text: String?
     public let at: String?
 
-    public init(type: String, deviceId: String? = nil, text: String? = nil, at: String? = nil) {
+    public init(type: String, deviceId: String? = nil, eventId: String? = nil, text: String? = nil, at: String? = nil) {
         self.type = type
         self.deviceId = deviceId
+        self.eventId = eventId
         self.text = text
         self.at = at
     }

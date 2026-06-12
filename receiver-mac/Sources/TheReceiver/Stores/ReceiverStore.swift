@@ -16,7 +16,7 @@ final class ReceiverStore: ObservableObject {
     @Published var notificationStatus = "Notifications not checked."
     @Published var lastError = ""
 
-    var onNuke: ((String) -> Void)?
+    var onNuke: ((String, String?) -> Void)?
 
     private let client = ReceiverRelayClient()
 
@@ -122,6 +122,7 @@ final class ReceiverStore: ObservableObject {
             apply(snapshot)
         }
         if let event = envelope.event {
+            client.send(ReceiverOutbound(type: "eventReceived", eventId: event.id))
             appendEvent(event)
             notify(for: event)
         }
@@ -173,7 +174,7 @@ final class ReceiverStore: ObservableObject {
         case "nuke":
             deliverNotification(title: "The Nuke", body: event.text)
             NSApp.activate(ignoringOtherApps: true)
-            onNuke?(event.displayName)
+            onNuke?(event.displayName, event.nukeMessage)
         default:
             break
         }

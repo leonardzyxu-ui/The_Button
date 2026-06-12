@@ -16,6 +16,7 @@ function App() {
   const [notice, setNotice] = React.useState("");
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [nukeConfirm, setNukeConfirm] = React.useState("");
+  const [nukeMessage, setNukeMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const wsRef = React.useRef<WebSocket | null>(null);
 
@@ -117,8 +118,10 @@ function App() {
     setBusy(true);
     setNotice("");
     try {
-      await pressButton(session);
-      setNotice("Sent. Leo will get the notification immediately if The Receiver is online.");
+      const response = await pressButton(session);
+      setNotice(response.deliveredToReceiver
+        ? "Leo's Receiver received the button press."
+        : "Sent to the relay, but Leo's Receiver has not confirmed it yet.");
     } catch (error) {
       handleSessionError(error);
     } finally {
@@ -147,10 +150,13 @@ function App() {
     setBusy(true);
     setNotice("");
     try {
-      await sendNuke(session);
-      setNotice("Nuke sent.");
+      const response = await sendNuke(session, nukeMessage);
+      setNotice(response.deliveredToReceiver
+        ? "Leo's Receiver received The Nuke."
+        : "Nuke reached the relay, but Leo's Receiver has not confirmed it yet.");
       setSettingsOpen(false);
       setNukeConfirm("");
+      setNukeMessage("");
     } catch (error) {
       handleSessionError(error);
     } finally {
@@ -282,6 +288,16 @@ function App() {
                 Type yes to confirm
                 <input value={nukeConfirm} onChange={event => setNukeConfirm(event.target.value)} placeholder="yes" />
               </label>
+              <label className="confirm-label">
+                Message for Leo
+                <textarea
+                  value={nukeMessage}
+                  onChange={event => setNukeMessage(event.target.value)}
+                  placeholder="Optional, but it will appear on Leo's red Nuke screen."
+                  maxLength={240}
+                  rows={4}
+                />
+              </label>
               <button className="nuke-submit squircle" disabled={nukeConfirm !== "yes" || busy} onClick={handleNuke}>
                 Nuke Leo's Receiver
               </button>
@@ -307,4 +323,3 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>
 );
-

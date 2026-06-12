@@ -74,15 +74,20 @@ describe("The Button relay", () => {
     });
     expect(rejected.status).toBe(400);
 
-    const accepted = await post(baseURL, "/api/events", {
+    const acceptedPromise = post(baseURL, "/api/events", {
       deviceId: joined.device.deviceId,
       deviceSecret: joined.deviceSecret,
       eventType: "nuke",
-      confirm: "yes"
+      confirm: "yes",
+      message: "Please look at the laptop."
     });
-    expect(accepted.status).toBe(200);
     const event = await nextOfType(receiver, "event");
-    expect(event.event.text).toBe("Alex has nuked you.");
+    receiver.send(JSON.stringify({ type: "eventReceived", eventId: event.event.id }));
+    const accepted = await acceptedPromise;
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.deliveredToReceiver).toBe(true);
+    expect(event.event.text).toBe("Alex has nuked you: Please look at the laptop.");
+    expect(event.event.nukeMessage).toBe("Please look at the laptop.");
     receiver.close();
   });
 

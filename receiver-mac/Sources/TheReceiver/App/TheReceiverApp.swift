@@ -11,8 +11,8 @@ struct TheReceiverApp: App {
                 .environmentObject(store)
                 .frame(minWidth: 980, minHeight: 650)
                 .onAppear {
-                    store.onNuke = { name in
-                        NukeOverlayWindowController.shared.show(name: name)
+                    store.onNuke = { name, message in
+                        NukeOverlayWindowController.shared.show(name: name, message: message)
                     }
                     store.requestNotifications()
                     store.connect()
@@ -26,7 +26,7 @@ struct TheReceiverApp: App {
                 .keyboardShortcut("r", modifiers: [.command, .shift])
 
                 Button("Show Test Nuke Overlay") {
-                    NukeOverlayWindowController.shared.show(name: "Test")
+                    NukeOverlayWindowController.shared.show(name: "Test", message: "This is what a Nuke message will look like.")
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
@@ -40,4 +40,3 @@ struct TheReceiverApp: App {
         }
     }
 }
-
