@@ -1,0 +1,3 @@
+[actions]
+Run = "cd receiver-mac && ./script/build_and_run.sh"
+

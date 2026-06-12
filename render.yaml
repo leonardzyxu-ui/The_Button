@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: the-button
+    runtime: node
+    plan: free
+    rootDir: relay-web
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: THEBUTTON_JOIN_PASSWORD
+        sync: false
+      - key: THEBUTTON_RECEIVER_TOKEN
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: THEBUTTON_IP_HASH_SALT
+        sync: false
+

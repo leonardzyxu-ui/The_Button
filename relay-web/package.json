@@ -1,0 +1,33 @@
+{
+  "name": "the-button-relay-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "vite --host 127.0.0.1 web",
+    "dev:server": "npm run build:web && PORT=8787 node server/render-server.js",
+    "start": "node server/render-server.js",
+    "build:web": "vite build web",
+    "build": "npm run build:web",
+    "test": "vitest run",
+    "check": "tsc -p web/tsconfig.json --noEmit && npm run test && node --check server/render-server.js"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.38.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@types/ws": "^8.5.13"
+  }
+}
+
