@@ -22,7 +22,8 @@ export function joinDevice(input: {
     password: input.password,
     displayName: input.displayName,
     deviceId: input.existing?.deviceId,
-    deviceSecret: input.existing?.deviceSecret
+    deviceSecret: input.existing?.deviceSecret,
+    clientFingerprint: clientFingerprint()
   });
 }
 
@@ -30,7 +31,8 @@ export function pressButton(session: DeviceSession): Promise<ButtonEventResponse
   return postJSON("/api/events", {
     deviceId: session.deviceId,
     deviceSecret: session.deviceSecret,
-    eventType: "press"
+    eventType: "press",
+    clientFingerprint: clientFingerprint()
   });
 }
 
@@ -40,7 +42,8 @@ export function sendNuke(session: DeviceSession, message: string): Promise<Butto
     deviceSecret: session.deviceSecret,
     eventType: "nuke",
     confirm: "yes",
-    message
+    message,
+    clientFingerprint: clientFingerprint()
   });
 }
 
@@ -48,7 +51,8 @@ export function sendMessage(session: DeviceSession, text: string): Promise<{ ok:
   return postJSON("/api/messages", {
     deviceId: session.deviceId,
     deviceSecret: session.deviceSecret,
-    text
+    text,
+    clientFingerprint: clientFingerprint()
   });
 }
 
@@ -58,4 +62,21 @@ export function siteWebSocketURL(session: DeviceSession): string {
   url.searchParams.set("deviceId", session.deviceId);
   url.searchParams.set("deviceSecret", session.deviceSecret);
   return url.toString();
+}
+
+function clientFingerprint(): string {
+  const screenInfo = typeof screen === "undefined"
+    ? "noscreen"
+    : `${screen.width}x${screen.height}x${screen.colorDepth}`;
+  const nav = typeof navigator === "undefined" ? undefined : navigator;
+  return [
+    nav?.userAgent || "",
+    nav?.platform || "",
+    (nav?.languages || []).join(","),
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    screenInfo,
+    String(nav?.hardwareConcurrency || ""),
+    String((nav as Navigator & { deviceMemory?: number })?.deviceMemory || ""),
+    String(nav?.maxTouchPoints || "")
+  ].join("|");
 }

@@ -11,6 +11,7 @@ final class ReceiverStore: ObservableObject {
     @Published var devices: [ButtonDevice] = []
     @Published var events: [ButtonEvent] = []
     @Published var messages: [ButtonMessage] = []
+    @Published var bans: [ButtonBan] = []
     @Published var selectedDeviceID: String?
     @Published var connectionStatus = "Disconnected"
     @Published var notificationStatus = "Notifications not checked."
@@ -32,6 +33,18 @@ final class ReceiverStore: ObservableObject {
 
     var activeDevices: [ButtonDevice] {
         devices.filter { $0.status == "active" }
+    }
+
+    var pendingDevices: [ButtonDevice] {
+        devices.filter { $0.status == "pending" }
+    }
+
+    var deletedDevices: [ButtonDevice] {
+        devices.filter { $0.status == "deleted" }
+    }
+
+    var bannedDevices: [ButtonDevice] {
+        devices.filter { $0.status == "banned" }
     }
 
     var selectedDevice: ButtonDevice? {
@@ -102,6 +115,16 @@ final class ReceiverStore: ObservableObject {
         client.send(ReceiverOutbound(type: "reply", deviceId: device.deviceId, text: trimmed))
     }
 
+    func approveSelected() {
+        guard let device = selectedDevice else { return }
+        client.send(ReceiverOutbound(type: "approveDevice", deviceId: device.deviceId))
+    }
+
+    func reviveSelected() {
+        guard let device = selectedDevice else { return }
+        client.send(ReceiverOutbound(type: "reviveDevice", deviceId: device.deviceId))
+    }
+
     func deleteSelected() {
         guard let device = selectedDevice else { return }
         client.send(ReceiverOutbound(type: "deleteDevice", deviceId: device.deviceId))
@@ -141,6 +164,7 @@ final class ReceiverStore: ObservableObject {
         devices = snapshot.users
         events = snapshot.events
         messages = snapshot.messages
+        bans = snapshot.bans ?? []
         if selectedDeviceID == nil || !devices.contains(where: { $0.deviceId == selectedDeviceID }) {
             selectedDeviceID = activeDevices.first?.deviceId ?? devices.first?.deviceId
         }

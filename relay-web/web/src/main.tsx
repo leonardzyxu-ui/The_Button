@@ -8,6 +8,7 @@ import "./styles.css";
 
 function App() {
   const [session, setSession] = React.useState<DeviceSession | null>(() => loadSession());
+  const [accessStatus, setAccessStatus] = React.useState<"active" | "pending">("active");
   const [joinName, setJoinName] = React.useState(session?.displayName || "");
   const [joinPassword, setJoinPassword] = React.useState("");
   const [messages, setMessages] = React.useState<ConversationMessage[]>([]);
@@ -41,7 +42,21 @@ function App() {
         const payload = JSON.parse(String(event.data)) as SiteSocketMessage;
         if (payload.type === "snapshot") {
           setMessages(payload.messages);
+          setAccessStatus(payload.device.status === "pending" ? "pending" : "active");
           setStatus(payload.receiverOnline ? "Connected" : "Receiver offline");
+          return;
+        }
+        if (payload.type === "pending") {
+          setAccessStatus("pending");
+          setStatus("Awaiting approval");
+          setNotice("Request sent. Waiting for Leo to approve this device.");
+          return;
+        }
+        if (payload.type === "approved") {
+          setAccessStatus("active");
+          setMessages(payload.messages);
+          setStatus(payload.receiverOnline ? "Connected" : "Receiver offline");
+          setNotice("Leo approved this device.");
           return;
         }
         if (payload.type === "message") {
@@ -103,9 +118,13 @@ function App() {
       };
       saveSession(next);
       setSession(next);
+      setAccessStatus(response.device.status === "pending" ? "pending" : "active");
       setMessages(response.messages);
       setJoinPassword("");
-      setStatus(response.receiverOnline ? "Connected" : "Receiver offline");
+      setStatus(response.device.status === "pending" ? "Awaiting approval" : (response.receiverOnline ? "Connected" : "Receiver offline"));
+      if (response.device.status === "pending") {
+        setNotice("Request sent. Waiting for Leo to approve this device.");
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not join.");
     } finally {
@@ -203,6 +222,25 @@ function App() {
               {busy ? "Checking..." : "Enter The Button"}
             </button>
           </form>
+          {notice && <p className="notice">{notice}</p>}
+        </section>
+      </main>
+    );
+  }
+
+  if (accessStatus === "pending") {
+    return (
+      <main className="gate-shell">
+        <section className="gate-panel squircle">
+          <div className="brand-row">
+            <span className="brand-dot" />
+            <span>The Button</span>
+          </div>
+          <h1>Waiting for Leo.</h1>
+          <p className="danger-copy">Your request is in The Receiver. You cannot press, message, or Nuke until Leo approves this device.</p>
+          <button className="primary-button squircle" onClick={logout}>
+            Use another name
+          </button>
           {notice && <p className="notice">{notice}</p>}
         </section>
       </main>

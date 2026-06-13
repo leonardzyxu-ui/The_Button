@@ -28,15 +28,18 @@ describe("The Button relay", () => {
     expect(accepted.body.device.deviceId).toMatch(/^btn_/);
     expect(accepted.body.deviceSecret).toBeTruthy();
     expect(accepted.body.device.displayName).toBe("Alex");
+    expect(accepted.body.device.status).toBe("pending");
   });
 
   it("keeps the conversation live between website and Receiver", async () => {
     const { baseURL, wsBaseURL } = await startTestServer();
     const joined = await join(baseURL, "Alex");
-    const site = await connectWS(`${wsBaseURL}/ws/site?deviceId=${joined.device.deviceId}&deviceSecret=${joined.deviceSecret}`);
     const receiver = await connectWS(`${wsBaseURL}/ws/receiver?token=receiver-token`);
-    await nextOfType(site, "snapshot");
     await nextOfType(receiver, "snapshot");
+    receiver.send(JSON.stringify({ type: "approveDevice", deviceId: joined.device.deviceId }));
+    await nextOfType(receiver, "snapshot");
+    const site = await connectWS(`${wsBaseURL}/ws/site?deviceId=${joined.device.deviceId}&deviceSecret=${joined.deviceSecret}`);
+    await nextOfType(site, "snapshot");
 
     const sent = await post(baseURL, "/api/messages", {
       deviceId: joined.device.deviceId,
@@ -64,6 +67,8 @@ describe("The Button relay", () => {
     const { baseURL, wsBaseURL } = await startTestServer();
     const joined = await join(baseURL, "Alex");
     const receiver = await connectWS(`${wsBaseURL}/ws/receiver?token=receiver-token`);
+    await nextOfType(receiver, "snapshot");
+    receiver.send(JSON.stringify({ type: "approveDevice", deviceId: joined.device.deviceId }));
     await nextOfType(receiver, "snapshot");
 
     const rejected = await post(baseURL, "/api/events", {
@@ -94,10 +99,12 @@ describe("The Button relay", () => {
   it("soft delete forces the browser to request access again", async () => {
     const { baseURL, wsBaseURL } = await startTestServer();
     const joined = await join(baseURL, "Alex");
-    const site = await connectWS(`${wsBaseURL}/ws/site?deviceId=${joined.device.deviceId}&deviceSecret=${joined.deviceSecret}`);
     const receiver = await connectWS(`${wsBaseURL}/ws/receiver?token=receiver-token`);
-    await nextOfType(site, "snapshot");
     await nextOfType(receiver, "snapshot");
+    receiver.send(JSON.stringify({ type: "approveDevice", deviceId: joined.device.deviceId }));
+    await nextOfType(receiver, "snapshot");
+    const site = await connectWS(`${wsBaseURL}/ws/site?deviceId=${joined.device.deviceId}&deviceSecret=${joined.deviceSecret}`);
+    await nextOfType(site, "snapshot");
 
     receiver.send(JSON.stringify({ type: "deleteDevice", deviceId: joined.device.deviceId }));
     expect((await nextOfType(site, "deleted")).deviceId).toBe(joined.device.deviceId);
@@ -119,6 +126,8 @@ describe("The Button relay", () => {
     const joined = await join(baseURL, "Alex");
     const receiver = await connectWS(`${wsBaseURL}/ws/receiver?token=receiver-token`);
     await nextOfType(receiver, "snapshot");
+    receiver.send(JSON.stringify({ type: "approveDevice", deviceId: joined.device.deviceId }));
+    await nextOfType(receiver, "snapshot");
 
     receiver.send(JSON.stringify({ type: "banDevice", deviceId: joined.device.deviceId }));
     await nextOfType(receiver, "snapshot");
@@ -135,8 +144,18 @@ describe("The Button relay", () => {
   });
 
   it("rate-limits button abuse", async () => {
-    const { baseURL } = await startTestServer();
+    const { baseURL, wsBaseURL } = await startTestServer();
     const joined = await join(baseURL, "Alex");
+    const receiver = await connectWS(`${wsBaseURL}/ws/receiver?token=receiver-token`);
+    await nextOfType(receiver, "snapshot");
+    receiver.send(JSON.stringify({ type: "approveDevice", deviceId: joined.device.deviceId }));
+    await nextOfType(receiver, "snapshot");
+    receiver.on("message", data => {
+      const payload = JSON.parse(String(data));
+      if (payload.type === "event") {
+        receiver.send(JSON.stringify({ type: "eventReceived", eventId: payload.event.id }));
+      }
+    });
     let lastStatus = 200;
     for (let index = 0; index < 31; index += 1) {
       const result = await post(baseURL, "/api/events", {
@@ -147,6 +166,7 @@ describe("The Button relay", () => {
       lastStatus = result.status;
     }
     expect(lastStatus).toBe(429);
+    receiver.close();
   });
 });
 

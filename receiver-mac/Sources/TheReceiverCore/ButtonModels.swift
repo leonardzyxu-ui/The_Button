@@ -82,6 +82,26 @@ public struct ButtonMessage: Codable, Identifiable, Equatable {
     }
 }
 
+public struct ButtonBan: Codable, Identifiable, Equatable {
+    public let id: String
+    public let deviceId: String
+    public let displayName: String
+    public let ipHash: String
+    public let fingerprintHash: String
+    public let createdAt: String
+    public let revivedAt: String?
+
+    public init(id: String, deviceId: String, displayName: String, ipHash: String, fingerprintHash: String, createdAt: String, revivedAt: String? = nil) {
+        self.id = id
+        self.deviceId = deviceId
+        self.displayName = displayName
+        self.ipHash = ipHash
+        self.fingerprintHash = fingerprintHash
+        self.createdAt = createdAt
+        self.revivedAt = revivedAt
+    }
+}
+
 public struct ReceiverTotals: Codable, Equatable {
     public let users: Int
     public let online: Int
@@ -103,6 +123,7 @@ public struct ReceiverSnapshot: Codable, Equatable {
     public let users: [ButtonDevice]
     public let events: [ButtonEvent]
     public let messages: [ButtonMessage]
+    public let bans: [ButtonBan]?
     public let totals: ReceiverTotals
 
     public init(
@@ -112,6 +133,7 @@ public struct ReceiverSnapshot: Codable, Equatable {
         users: [ButtonDevice],
         events: [ButtonEvent],
         messages: [ButtonMessage],
+        bans: [ButtonBan]? = [],
         totals: ReceiverTotals = ReceiverTotals()
     ) {
         self.type = type
@@ -120,6 +142,7 @@ public struct ReceiverSnapshot: Codable, Equatable {
         self.users = users
         self.events = events
         self.messages = messages
+        self.bans = bans
         self.totals = totals
     }
 }

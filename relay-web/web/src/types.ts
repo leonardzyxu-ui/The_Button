@@ -1,4 +1,4 @@
-export type DeviceStatus = "active" | "deleted" | "banned";
+export type DeviceStatus = "pending" | "active" | "deleted" | "banned";
 
 export interface ButtonDevice {
   deviceId: string;
@@ -50,6 +50,7 @@ export interface JoinResponse {
   ok: true;
   device: ButtonDevice;
   deviceSecret: string;
+  pending?: boolean;
   messages: ConversationMessage[];
   receiverOnline: boolean;
 }
@@ -68,6 +69,8 @@ export interface SiteMessageMessage {
 
 export type SiteSocketMessage =
   | SiteSnapshotMessage
+  | { type: "pending"; device: ButtonDevice; receiverOnline: boolean }
+  | { type: "approved"; device: ButtonDevice; messages: ConversationMessage[]; receiverOnline: boolean }
   | SiteMessageMessage
   | { type: "deleted"; deviceId: string }
   | { type: "banned"; deviceId: string }

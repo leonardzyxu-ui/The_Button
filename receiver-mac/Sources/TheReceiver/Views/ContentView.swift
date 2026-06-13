@@ -49,10 +49,10 @@ struct ContentView: View {
                 title: "Requests",
                 systemImage: "tray.full",
                 selected: selectedSection == .requests,
-                badge: deletedCount
+                badge: requestCount
             ) {
                 selectedSection = .requests
-                store.selectedDeviceID = deletedDevices.first?.deviceId ?? store.selectedDeviceID
+                store.selectedDeviceID = requestDevices.first?.deviceId ?? store.selectedDeviceID
             }
             SidebarButton(
                 title: "Conversations",
@@ -163,23 +163,68 @@ struct ContentView: View {
     }
 
     private var requestsView: some View {
-        HStack(spacing: 12) {
-            Panel(title: "Requests \(deletedDevices.isEmpty ? "" : "•")") {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if deletedDevices.isEmpty {
-                            EmptyPanelText("No requests.")
-                        } else {
-                            ForEach(deletedDevices) { device in
-                                DeviceRow(device: device, selected: store.selectedDeviceID == device.deviceId) {
-                                    store.selectedDeviceID = device.deviceId
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Panel(title: "Requests \(requestDevices.isEmpty ? "" : "•")") {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            if requestDevices.isEmpty {
+                                EmptyPanelText("No pending or soft-deleted devices.")
+                            } else {
+                                ForEach(requestDevices) { device in
+                                    ModerationDeviceRow(
+                                        device: device,
+                                        selected: store.selectedDeviceID == device.deviceId,
+                                        primaryTitle: "Approve",
+                                        primarySystemImage: "checkmark.circle",
+                                        primaryAction: {
+                                            store.selectedDeviceID = device.deviceId
+                                            store.approveSelected()
+                                        },
+                                        secondaryTitle: "Permanent Delete",
+                                        secondarySystemImage: "trash.slash",
+                                        secondaryAction: {
+                                            store.selectedDeviceID = device.deviceId
+                                            showingPermanentDelete = true
+                                        }
+                                    ) {
+                                        store.selectedDeviceID = device.deviceId
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Panel(title: "Permanent Delete History") {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            if store.bannedDevices.isEmpty {
+                                EmptyPanelText("No permanently deleted devices.")
+                            } else {
+                                ForEach(store.bannedDevices) { device in
+                                    ModerationDeviceRow(
+                                        device: device,
+                                        selected: store.selectedDeviceID == device.deviceId,
+                                        primaryTitle: "Revive",
+                                        primarySystemImage: "arrow.uturn.backward.circle",
+                                        primaryAction: {
+                                            store.selectedDeviceID = device.deviceId
+                                            store.reviveSelected()
+                                        },
+                                        secondaryTitle: nil,
+                                        secondarySystemImage: nil,
+                                        secondaryAction: nil
+                                    ) {
+                                        store.selectedDeviceID = device.deviceId
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            .frame(minWidth: 280)
+            .frame(minHeight: 290)
 
             conversationPane
         }
@@ -254,7 +299,7 @@ struct ContentView: View {
                         Image(systemName: "paperplane.fill")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.selectedDevice == nil)
+                    .disabled(replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.selectedDevice?.status != "active")
 
                     Button(role: .destructive) {
                         store.deleteSelected()
@@ -277,12 +322,16 @@ struct ContentView: View {
     }
 
     private var deletedCount: Int? {
-        let count = deletedDevices.count
+        let count = requestDevices.count
         return count > 0 ? count : nil
     }
 
-    private var deletedDevices: [ButtonDevice] {
-        store.devices.filter { $0.status == "deleted" }
+    private var requestCount: Int? {
+        deletedCount
+    }
+
+    private var requestDevices: [ButtonDevice] {
+        store.devices.filter { $0.status == "pending" || $0.status == "deleted" }
     }
 
     private func lastPreview(for deviceId: String) -> String {
@@ -489,6 +538,64 @@ private struct DeviceRow: View {
     }
 }
 
+private struct ModerationDeviceRow: View {
+    let device: ButtonDevice
+    let selected: Bool
+    let primaryTitle: String
+    let primarySystemImage: String
+    let primaryAction: () -> Void
+    let secondaryTitle: String?
+    let secondarySystemImage: String?
+    let secondaryAction: (() -> Void)?
+    let selectAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: selectAction) {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(Color.white.opacity(0.18))
+                        .overlay(Text(String(device.displayName.prefix(1))).font(.headline))
+                        .frame(width: 36, height: 36)
+                    VStack(alignment: .leading) {
+                        Text(device.displayName)
+                            .fontWeight(.semibold)
+                        Text(device.status.capitalized)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Circle()
+                        .fill(statusColor(device.status))
+                        .frame(width: 8, height: 8)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                primaryAction()
+            } label: {
+                Label(primaryTitle, systemImage: primarySystemImage)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+
+            if let secondaryTitle, let secondarySystemImage, let secondaryAction {
+                Button(role: .destructive) {
+                    secondaryAction()
+                } label: {
+                    Label(secondaryTitle, systemImage: secondarySystemImage)
+                }
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 7)
+        .background(selected ? Color.white.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
 private struct EventRow: View {
     let event: ButtonEvent
 
@@ -603,6 +710,8 @@ private struct PermanentDeleteSheet: View {
 
 private func statusColor(_ status: String) -> Color {
     switch status {
+    case "pending":
+        return .blue
     case "deleted":
         return .orange
     case "banned":

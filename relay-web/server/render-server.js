@@ -133,6 +133,14 @@ async function handleDeviceJoin(request, response, context) {
 
   const state = await context.store.getState();
   const now = new Date().toISOString();
+  const ipHash = hashIP(ip, context.config);
+  const fingerprintHash = hashFingerprint(body?.clientFingerprint, context.config);
+  const ban = matchingActiveBan(state, ipHash, fingerprintHash);
+  if (ban) {
+    sendJSON(response, { error: "This device is permanently deleted.", code: "banned" }, 403);
+    return;
+  }
+
   const requestedID = cleanDeviceID(body?.deviceId);
   const requestedSecret = String(body?.deviceSecret || "");
   let device = requestedID ? state.devices[requestedID] : null;
@@ -155,27 +163,31 @@ async function handleDeviceJoin(request, response, context) {
       deviceId,
       displayName,
       secretHash: secretHash(deviceSecret),
-      status: "active",
+      status: "pending",
       createdAt: now,
       updatedAt: now,
       lastSeenAt: now,
-      lastIpHash: hashIP(ip, context.config),
+      lastIpHash: ipHash,
+      fingerprintHash,
       counts: { presses: 0, messages: 0, nukes: 0 }
     };
     state.devices[deviceId] = device;
   } else {
     device.displayName = displayName;
-    device.status = "active";
+    if (device.status !== "active") {
+      device.status = "pending";
+    }
     device.updatedAt = now;
     device.lastSeenAt = now;
-    device.lastIpHash = hashIP(ip, context.config);
+    device.lastIpHash = ipHash;
+    device.fingerprintHash = fingerprintHash || device.fingerprintHash;
   }
 
   pushEvent(state, {
-    type: "joined",
+    type: device.status === "active" ? "joined" : "request",
     deviceId: device.deviceId,
     displayName: device.displayName,
-    text: `${device.displayName} connected.`
+    text: device.status === "active" ? `${device.displayName} connected.` : `${device.displayName} requested access.`
   });
   await context.store.setState(state);
 
@@ -184,7 +196,8 @@ async function handleDeviceJoin(request, response, context) {
     ok: true,
     device: publicDevice(device, context),
     deviceSecret,
-    messages: messagesForDevice(state, device.deviceId),
+    pending: device.status !== "active",
+    messages: device.status === "active" ? messagesForDevice(state, device.deviceId) : [],
     receiverOnline: context.receiverSockets.size > 0
   });
 }
@@ -227,6 +240,7 @@ async function handleEvent(request, response, context) {
   const now = new Date().toISOString();
   fresh.lastSeenAt = now;
   fresh.lastIpHash = hashIP(ip, context.config);
+  fresh.fingerprintHash = hashFingerprint(body?.clientFingerprint, context.config) || fresh.fingerprintHash;
   fresh.counts = normalizeCounts(fresh.counts);
   if (eventType === "press") {
     fresh.counts.presses += 1;
@@ -277,6 +291,8 @@ async function handleMessage(request, response, context) {
 
   const now = new Date().toISOString();
   device.lastSeenAt = now;
+  device.lastIpHash = hashIP(ip, context.config);
+  device.fingerprintHash = hashFingerprint(body?.clientFingerprint, context.config) || device.fingerprintHash;
   device.counts = normalizeCounts(device.counts);
   device.counts.messages += 1;
   const message = pushMessage(state, {
@@ -308,9 +324,34 @@ async function attachSiteSocket(socket, url, request, context) {
     closeSocket(socket);
     return;
   }
-  if (device.status !== "active") {
-    safeSend(socket, { type: device.status === "banned" ? "banned" : "deleted", deviceId });
+  if (device.status === "banned") {
+    safeSend(socket, { type: "banned", deviceId });
     closeSocket(socket);
+    return;
+  }
+  if (device.status === "deleted") {
+    safeSend(socket, { type: "deleted", deviceId });
+    closeSocket(socket);
+    return;
+  }
+  if (device.status === "pending") {
+    device.lastSeenAt = new Date().toISOString();
+    device.lastIpHash = hashIP(clientIP(request), context.config);
+    await context.store.setState(state);
+    if (!context.siteSockets.has(deviceId)) {
+      context.siteSockets.set(deviceId, new Set());
+    }
+    context.siteSockets.get(deviceId).add(socket);
+    context.socketDevices.set(socket, deviceId);
+    safeSend(socket, pendingSiteSnapshot(state, deviceId, context));
+    broadcastReceivers(context, receiverSnapshot(state, context));
+    socket.on("message", data => {
+      handleSiteSocketMessage(socket, data).catch(error => {
+        safeSend(socket, { type: "error", message: error?.message || "site socket error" });
+      });
+    });
+    socket.on("close", () => handleSiteSocketClosed(socket, context).catch(() => {}));
+    socket.on("error", () => handleSiteSocketClosed(socket, context).catch(() => {}));
     return;
   }
 
@@ -426,7 +467,7 @@ async function handleReceiverSocketMessage(socket, data, context) {
     return;
   }
 
-  if (message.type === "deleteDevice" || message.type === "banDevice") {
+  if (message.type === "approveDevice" || message.type === "reviveDevice" || message.type === "deleteDevice" || message.type === "banDevice") {
     const deviceId = cleanDeviceID(message.deviceId);
     if (!deviceId) {
       throw new Error("missing device id");
@@ -437,9 +478,51 @@ async function handleReceiverSocketMessage(socket, data, context) {
       throw new Error("unknown device");
     }
     const now = new Date().toISOString();
+    if (message.type === "approveDevice") {
+      device.status = "active";
+      device.approvedAt = now;
+      device.updatedAt = now;
+      pushEvent(state, {
+        type: "approved",
+        deviceId,
+        displayName: device.displayName,
+        text: `${device.displayName} was approved.`
+      });
+      await context.store.setState(state);
+      sendToDevice(context, deviceId, approvedSiteSnapshot(state, deviceId, context));
+      broadcastReceivers(context, receiverSnapshot(state, context));
+      return;
+    }
+    if (message.type === "reviveDevice") {
+      device.status = "pending";
+      device.revivedAt = now;
+      device.updatedAt = now;
+      for (const ban of state.bans) {
+        if (ban.deviceId === deviceId && !ban.revivedAt) {
+          ban.revivedAt = now;
+        }
+      }
+      pushEvent(state, {
+        type: "revived",
+        deviceId,
+        displayName: device.displayName,
+        text: `${device.displayName} was revived from Permanent Delete.`
+      });
+      await context.store.setState(state);
+      broadcastReceivers(context, receiverSnapshot(state, context));
+      return;
+    }
     if (message.type === "banDevice") {
       device.status = "banned";
       device.bannedAt = now;
+      state.bans.push({
+        id: `ban_${randomID(12)}`,
+        deviceId,
+        displayName: device.displayName,
+        ipHash: device.lastIpHash || "",
+        fingerprintHash: device.fingerprintHash || "",
+        createdAt: now
+      });
       pushEvent(state, {
         type: "banned",
         deviceId,
@@ -496,6 +579,7 @@ function receiverSnapshot(state, context) {
       .sort((a, b) => String(a.displayName).localeCompare(String(b.displayName))),
     events: state.events.slice(-MAX_EVENTS),
     messages: state.messages.slice(-MAX_MESSAGES),
+    bans: state.bans,
     totals: {
       users: Object.keys(state.devices).length,
       online: [...context.siteSockets.keys()].length,
@@ -508,6 +592,23 @@ function receiverSnapshot(state, context) {
 function siteSnapshot(state, deviceId, context) {
   return {
     type: "snapshot",
+    device: publicDevice(state.devices[deviceId], context),
+    receiverOnline: context.receiverSockets.size > 0,
+    messages: messagesForDevice(state, deviceId)
+  };
+}
+
+function pendingSiteSnapshot(state, deviceId, context) {
+  return {
+    type: "pending",
+    device: publicDevice(state.devices[deviceId], context),
+    receiverOnline: context.receiverSockets.size > 0
+  };
+}
+
+function approvedSiteSnapshot(state, deviceId, context) {
+  return {
+    type: "approved",
     device: publicDevice(state.devices[deviceId], context),
     receiverOnline: context.receiverSockets.size > 0,
     messages: messagesForDevice(state, deviceId)
@@ -698,6 +799,14 @@ function hashIP(ip, config) {
   return createHash("sha256").update(`${config.ipHashSalt}:${ip}`).digest("hex").slice(0, 24);
 }
 
+function hashFingerprint(value, config) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  return createHash("sha256").update(`${config.ipHashSalt}:fp:${text}`).digest("hex").slice(0, 24);
+}
+
 function randomID(bytes) {
   return randomBytes(bytes).toString("base64url");
 }
@@ -770,6 +879,15 @@ function acknowledgeReceiverEvent(context, eventId) {
   context.pendingEventAcks.get(clean)?.(true);
 }
 
+function matchingActiveBan(state, ipHash, fingerprintHash) {
+  return state.bans.find(ban => {
+    if (ban.revivedAt) {
+      return false;
+    }
+    return Boolean((ipHash && ban.ipHash === ipHash) || (fingerprintHash && ban.fingerprintHash === fingerprintHash));
+  });
+}
+
 function normalizeCounts(value) {
   return {
     presses: Number(value?.presses || 0),
@@ -838,7 +956,8 @@ export function normalizeState(value = {}) {
   return {
     devices: value.devices && typeof value.devices === "object" ? value.devices : {},
     events: Array.isArray(value.events) ? value.events : [],
-    messages: Array.isArray(value.messages) ? value.messages : []
+    messages: Array.isArray(value.messages) ? value.messages : [],
+    bans: Array.isArray(value.bans) ? value.bans : []
   };
 }
 
