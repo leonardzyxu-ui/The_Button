@@ -18,7 +18,9 @@ final class ReceiverStore: ObservableObject {
     @Published var notificationStatus = "Notifications not checked."
     @Published var lastError = ""
 
-    var onNuke: ((String, String?) -> Void)?
+    var onNuke: ((String, String?) -> Void)? = { name, message in
+        NukeOverlayWindowController.shared.show(name: name, message: message)
+    }
 
     private let client = ReceiverRelayClient()
 

@@ -13,7 +13,7 @@ final class NukeOverlayWindowController {
     func show(name: String, message: String? = nil) {
         hide()
         let screenFrame = (NSScreen.main ?? NSScreen.screens.first)?.frame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let panel = NSPanel(
+        let panel = NukeOverlayPanel(
             contentRect: screenFrame,
             styleMask: [.borderless],
             backing: .buffered,
@@ -24,7 +24,7 @@ final class NukeOverlayWindowController {
         }
         panel.contentViewController = NSHostingController(rootView: view)
         panel.level = .screenSaver
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .stationary]
         panel.backgroundColor = .red
         panel.isOpaque = true
         panel.hasShadow = false
@@ -51,6 +51,11 @@ final class NukeOverlayWindowController {
         window?.orderOut(nil)
         window = nil
     }
+}
+
+private final class NukeOverlayPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }
 
 private struct NukeOverlayView: View {

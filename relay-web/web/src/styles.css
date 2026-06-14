@@ -189,6 +189,16 @@ textarea:focus {
   border-radius: 10px;
 }
 
+.danger-icon {
+  color: #fff;
+  background: rgba(245, 25, 25, 0.16);
+  border-color: rgba(255, 80, 80, 0.34);
+}
+
+.danger-icon:hover {
+  background: rgba(245, 25, 25, 0.28);
+}
+
 .button-stage {
   display: grid;
   place-items: center;
@@ -350,42 +360,85 @@ textarea:focus {
   backdrop-filter: blur(10px);
 }
 
-.settings-panel {
-  width: min(880px, 100%);
-  min-height: min(560px, calc(100vh - 48px));
-  display: grid;
-  grid-template-columns: 210px 1fr;
+.profile-panel,
+.nuke-panel {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 48px);
   background: #0b1117;
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 30px 100px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
+  overflow: auto;
 }
 
-.settings-nav {
-  padding: 20px 14px;
-  border-right: 1px solid var(--line);
+.profile-panel {
+  padding: 54px 24px 24px;
 }
 
-.settings-nav h2 {
-  margin: 0 0 24px;
+.nuke-panel {
+  width: min(640px, 100%);
 }
 
-.settings-tab {
-  width: 100%;
-  min-height: 42px;
+.nuke-panel .settings-content {
+  padding: 42px 64px 34px;
+}
+
+.nuke-panel .nuke-preview {
+  height: 130px;
+  margin: 14px 0;
+}
+
+.nuke-panel textarea {
+  min-height: 92px;
+}
+
+.profile-heading {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 12px;
-  color: var(--text);
-  background: transparent;
-  border: 0;
-  border-radius: 10px;
-  text-align: left;
+  margin-bottom: 18px;
 }
 
-.settings-tab.active {
-  background: rgba(245, 25, 25, 0.54);
+.profile-heading h2 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.profile-stat {
+  min-width: 0;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.profile-stat.wide {
+  grid-column: 1 / -1;
+}
+
+.profile-stat span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.profile-stat strong {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.profile-form {
+  display: grid;
+  gap: 12px;
 }
 
 .settings-content {
@@ -492,15 +545,15 @@ textarea:focus {
     display: none;
   }
 
-  .settings-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .settings-nav {
-    display: none;
-  }
-
   .settings-content {
     padding: 54px 22px 28px;
+  }
+
+  .profile-panel {
+    padding: 54px 18px 20px;
+  }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
   }
 }

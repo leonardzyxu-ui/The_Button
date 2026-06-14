@@ -1,21 +1,26 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { Bell, LogOut, Menu, Send, Settings, ShieldAlert, X } from "lucide-react";
+import { LogOut, Menu, Send, ShieldAlert, User, X } from "lucide-react";
 import { joinDevice, pressButton, sendMessage, sendNuke, siteWebSocketURL } from "./api";
 import { clearSession, loadSession, saveSession } from "./session";
-import type { ConversationMessage, DeviceSession, SiteSocketMessage } from "./types";
+import type { ButtonDevice, ConversationMessage, DeviceSession, SiteSocketMessage } from "./types";
 import "./styles.css";
 
 function App() {
   const [session, setSession] = React.useState<DeviceSession | null>(() => loadSession());
   const [accessStatus, setAccessStatus] = React.useState<"active" | "pending">("active");
+  const [device, setDevice] = React.useState<ButtonDevice | null>(null);
+  const [receiverOnline, setReceiverOnline] = React.useState(false);
   const [joinName, setJoinName] = React.useState(session?.displayName || "");
   const [joinPassword, setJoinPassword] = React.useState("");
   const [messages, setMessages] = React.useState<ConversationMessage[]>([]);
   const [draft, setDraft] = React.useState("");
   const [status, setStatus] = React.useState("Disconnected");
   const [notice, setNotice] = React.useState("");
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [profileOpen, setProfileOpen] = React.useState(false);
+  const [profileName, setProfileName] = React.useState(session?.displayName || "");
+  const [profilePassword, setProfilePassword] = React.useState("");
+  const [nukeOpen, setNukeOpen] = React.useState(false);
   const [nukeConfirm, setNukeConfirm] = React.useState("");
   const [nukeMessage, setNukeMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -42,17 +47,23 @@ function App() {
         const payload = JSON.parse(String(event.data)) as SiteSocketMessage;
         if (payload.type === "snapshot") {
           setMessages(payload.messages);
+          setDevice(payload.device);
+          setReceiverOnline(payload.receiverOnline);
           setAccessStatus(payload.device.status === "pending" ? "pending" : "active");
           setStatus(payload.receiverOnline ? "Connected" : "Receiver offline");
           return;
         }
         if (payload.type === "pending") {
+          setDevice(payload.device);
+          setReceiverOnline(payload.receiverOnline);
           setAccessStatus("pending");
           setStatus("Awaiting approval");
           setNotice("Request sent. Waiting for Leo to approve this device.");
           return;
         }
         if (payload.type === "approved") {
+          setDevice(payload.device);
+          setReceiverOnline(payload.receiverOnline);
           setAccessStatus("active");
           setMessages(payload.messages);
           setStatus(payload.receiverOnline ? "Connected" : "Receiver offline");
@@ -66,6 +77,7 @@ function App() {
         if (payload.type === "deleted" || payload.type === "banned") {
           clearSession();
           setSession(null);
+          setDevice(null);
           setMessages([]);
           setNotice(payload.type === "banned" ? "This device was permanently deleted." : "Leo deleted this device. Send a new request to come back.");
           return;
@@ -118,6 +130,8 @@ function App() {
       };
       saveSession(next);
       setSession(next);
+      setDevice(response.device);
+      setReceiverOnline(response.receiverOnline);
       setAccessStatus(response.device.status === "pending" ? "pending" : "active");
       setMessages(response.messages);
       setJoinPassword("");
@@ -127,6 +141,37 @@ function App() {
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not join.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleProfileUpdate(event: React.FormEvent) {
+    event.preventDefault();
+    if (!session || !profileName.trim() || !profilePassword) return;
+    setBusy(true);
+    setNotice("");
+    try {
+      const response = await joinDevice({
+        password: profilePassword,
+        displayName: profileName,
+        existing: session
+      });
+      const next = {
+        deviceId: response.device.deviceId,
+        deviceSecret: response.deviceSecret,
+        displayName: response.device.displayName
+      };
+      saveSession(next);
+      setSession(next);
+      setDevice(response.device);
+      setReceiverOnline(response.receiverOnline);
+      setAccessStatus(response.device.status === "pending" ? "pending" : "active");
+      setMessages(response.messages);
+      setProfilePassword("");
+      setNotice("Profile updated.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not update profile.");
     } finally {
       setBusy(false);
     }
@@ -173,7 +218,7 @@ function App() {
       setNotice(response.deliveredToReceiver
         ? "Leo's Receiver received The Nuke."
         : "Nuke reached the relay, but Leo's Receiver has not confirmed it yet.");
-      setSettingsOpen(false);
+      setNukeOpen(false);
       setNukeConfirm("");
       setNukeMessage("");
     } catch (error) {
@@ -188,6 +233,7 @@ function App() {
     if (message.toLowerCase().includes("request access") || message.toLowerCase().includes("permanently")) {
       clearSession();
       setSession(null);
+      setDevice(null);
       setMessages([]);
     }
     setNotice(message);
@@ -196,6 +242,7 @@ function App() {
   function logout() {
     clearSession();
     setSession(null);
+    setDevice(null);
     setMessages([]);
     setNotice("Signed out on this browser.");
   }
@@ -255,8 +302,14 @@ function App() {
           <span>The Button</span>
         </div>
         <div className="topbar-actions">
-          <button className="icon-button" title="Settings" onClick={() => setSettingsOpen(true)}>
-            <Settings size={18} />
+          <button className="icon-button danger-icon" title="The Nuke" onClick={() => setNukeOpen(true)}>
+            <ShieldAlert size={18} />
+          </button>
+          <button className="icon-button" title="Profile" onClick={() => {
+            setProfileName(session.displayName);
+            setProfileOpen(true);
+          }}>
+            <User size={18} />
           </button>
           <button className="icon-button" title="Log out" onClick={logout}>
             <LogOut size={18} />
@@ -307,16 +360,66 @@ function App() {
 
       {notice && <div className="toast squircle">{notice}</div>}
 
-      {settingsOpen && (
+      {profileOpen && (
         <div className="modal-backdrop">
-          <section className="settings-panel squircle">
-            <nav className="settings-nav">
-              <h2>Settings</h2>
-              <button className="settings-tab active"><ShieldAlert size={17} /> The Nuke</button>
-              <button className="settings-tab"><Bell size={17} /> Status</button>
-            </nav>
+          <section className="profile-panel squircle">
+            <button className="close-button" title="Close" onClick={() => setProfileOpen(false)}><X size={18} /></button>
+            <div className="profile-heading">
+              <User size={22} />
+              <h2>Profile</h2>
+            </div>
+            <div className="profile-grid">
+              <div className="profile-stat">
+                <span>Name</span>
+                <strong>{session.displayName}</strong>
+              </div>
+              <div className="profile-stat">
+                <span>Connection</span>
+                <strong>{status}</strong>
+              </div>
+              <div className="profile-stat">
+                <span>Receiver</span>
+                <strong>{receiverOnline ? "Online" : "Offline"}</strong>
+              </div>
+              <div className="profile-stat">
+                <span>Messages</span>
+                <strong>{messages.length}</strong>
+              </div>
+              <div className="profile-stat wide">
+                <span>Device</span>
+                <strong>{device?.deviceId ?? session.deviceId}</strong>
+              </div>
+              <div className="profile-stat">
+                <span>Presses</span>
+                <strong>{device?.counts.presses ?? 0}</strong>
+              </div>
+              <div className="profile-stat">
+                <span>Nukes</span>
+                <strong>{device?.counts.nukes ?? 0}</strong>
+              </div>
+            </div>
+            <form className="profile-form" onSubmit={handleProfileUpdate}>
+              <label>
+                Display name
+                <input value={profileName} onChange={event => setProfileName(event.target.value)} maxLength={32} />
+              </label>
+              <label>
+                Password
+                <input value={profilePassword} onChange={event => setProfilePassword(event.target.value)} type="password" />
+              </label>
+              <button className="primary-button squircle" disabled={busy || !profileName.trim() || !profilePassword}>
+                Update Profile
+              </button>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {nukeOpen && (
+        <div className="modal-backdrop">
+          <section className="nuke-panel squircle">
             <div className="settings-content">
-              <button className="close-button" title="Close" onClick={() => setSettingsOpen(false)}><X size={18} /></button>
+              <button className="close-button" title="Close" onClick={() => setNukeOpen(false)}><X size={18} /></button>
               <h2>The Nuke</h2>
               <p className="danger-copy">This will force Leo's Receiver to the front and cover it red with white text.</p>
               <div className="nuke-preview squircle">
