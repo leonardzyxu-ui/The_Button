@@ -102,6 +102,26 @@ public struct ButtonBan: Codable, Identifiable, Equatable {
     }
 }
 
+public struct CriminalRecord: Codable, Identifiable, Equatable {
+    public let id: String
+    public let createdAt: String
+    public let type: String
+    public let deviceId: String
+    public let displayName: String
+    public let reason: String
+    public let until: String?
+
+    public init(id: String, createdAt: String, type: String, deviceId: String, displayName: String, reason: String, until: String? = nil) {
+        self.id = id
+        self.createdAt = createdAt
+        self.type = type
+        self.deviceId = deviceId
+        self.displayName = displayName
+        self.reason = reason
+        self.until = until
+    }
+}
+
 public struct ReceiverTotals: Codable, Equatable {
     public let users: Int
     public let online: Int
@@ -124,6 +144,7 @@ public struct ReceiverSnapshot: Codable, Equatable {
     public let events: [ButtonEvent]
     public let messages: [ButtonMessage]
     public let bans: [ButtonBan]?
+    public let records: [CriminalRecord]?
     public let totals: ReceiverTotals
 
     public init(
@@ -134,6 +155,7 @@ public struct ReceiverSnapshot: Codable, Equatable {
         events: [ButtonEvent],
         messages: [ButtonMessage],
         bans: [ButtonBan]? = [],
+        records: [CriminalRecord]? = [],
         totals: ReceiverTotals = ReceiverTotals()
     ) {
         self.type = type
@@ -143,6 +165,7 @@ public struct ReceiverSnapshot: Codable, Equatable {
         self.events = events
         self.messages = messages
         self.bans = bans
+        self.records = records
         self.totals = totals
     }
 }
@@ -152,6 +175,7 @@ public struct ReceiverEnvelope: Decodable {
     public let snapshot: ReceiverSnapshot?
     public let event: ButtonEvent?
     public let message: ButtonMessage?
+    public let record: CriminalRecord?
     public let errorMessage: String?
 
     private enum CodingKeys: String, CodingKey {
@@ -159,6 +183,7 @@ public struct ReceiverEnvelope: Decodable {
         case snapshot
         case event
         case message
+        case record
     }
 
     public init(from decoder: Decoder) throws {
@@ -171,6 +196,7 @@ public struct ReceiverEnvelope: Decodable {
         }
         event = try? container.decode(ButtonEvent.self, forKey: .event)
         message = try? container.decode(ButtonMessage.self, forKey: .message)
+        record = try? container.decode(CriminalRecord.self, forKey: .record)
         if type == "error" {
             errorMessage = try? container.decode(String.self, forKey: .message)
         } else {

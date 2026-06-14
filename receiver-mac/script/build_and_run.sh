@@ -16,6 +16,7 @@ APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$PRODUCT_NAME"
+APP_ICON="$ROOT_DIR/Assets/TheReceiverIcon.icns"
 
 if [[ -z "$SDK_PATH" ]]; then
   SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
@@ -76,6 +77,10 @@ else
 </dict>
 </plist>
 PLIST
+fi
+
+if [[ -f "$APP_ICON" ]]; then
+  cp "$APP_ICON" "$APP_RESOURCES/TheReceiverIcon.icns"
 fi
 
 printf "APPL????" >"$APP_CONTENTS/PkgInfo"

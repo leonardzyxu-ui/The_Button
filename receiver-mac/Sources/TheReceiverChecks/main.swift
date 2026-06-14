@@ -60,6 +60,28 @@ func testDecodesNukeEventEnvelope() throws {
     try check(envelope.event?.nukeMessage == "Please look at the laptop.", "nuke message did not decode")
 }
 
+func testDecodesCriminalRecordEnvelope() throws {
+    let json = """
+    {
+      "type": "record",
+      "record": {
+        "id": "rec_1",
+        "createdAt": "2026-06-12T00:00:00.000Z",
+        "type": "send_ban",
+        "deviceId": "btn_abc",
+        "displayName": "Alex",
+        "reason": "More than 3 button presses in 2 seconds.",
+        "until": "2026-06-12T00:03:00.000Z"
+      }
+    }
+    """.data(using: .utf8)!
+
+    let envelope = try JSONDecoder().decode(ReceiverEnvelope.self, from: json)
+    try check(envelope.record?.type == "send_ban", "record type did not decode")
+    try check(envelope.record?.displayName == "Alex", "record display name did not decode")
+    try check(envelope.record?.until == "2026-06-12T00:03:00.000Z", "record until did not decode")
+}
+
 func testBuildsReceiverWebSocketURL() throws {
     let url = try ReceiverURLBuilder.websocketURL(baseURL: "https://example.onrender.com", token: "secret")
     try check(url.absoluteString == "wss://example.onrender.com/ws/receiver?token=secret", "receiver websocket URL was wrong")
@@ -68,6 +90,7 @@ func testBuildsReceiverWebSocketURL() throws {
 let checks: [(String, () throws -> Void)] = [
     ("snapshot envelope", testDecodesSnapshotEnvelope),
     ("nuke event envelope", testDecodesNukeEventEnvelope),
+    ("criminal record envelope", testDecodesCriminalRecordEnvelope),
     ("receiver websocket URL", testBuildsReceiverWebSocketURL)
 ]
 

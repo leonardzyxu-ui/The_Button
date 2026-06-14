@@ -12,6 +12,7 @@ final class ReceiverStore: ObservableObject {
     @Published var events: [ButtonEvent] = []
     @Published var messages: [ButtonMessage] = []
     @Published var bans: [ButtonBan] = []
+    @Published var records: [CriminalRecord] = []
     @Published var selectedDeviceID: String?
     @Published var connectionStatus = "Disconnected"
     @Published var notificationStatus = "Notifications not checked."
@@ -158,6 +159,9 @@ final class ReceiverStore: ObservableObject {
                 )
             }
         }
+        if let record = envelope.record {
+            appendRecord(record)
+        }
     }
 
     private func apply(_ snapshot: ReceiverSnapshot) {
@@ -165,6 +169,7 @@ final class ReceiverStore: ObservableObject {
         events = snapshot.events
         messages = snapshot.messages
         bans = snapshot.bans ?? []
+        records = snapshot.records ?? []
         if selectedDeviceID == nil || !devices.contains(where: { $0.deviceId == selectedDeviceID }) {
             selectedDeviceID = activeDevices.first?.deviceId ?? devices.first?.deviceId
         }
@@ -189,6 +194,20 @@ final class ReceiverStore: ObservableObject {
         }
     }
 
+    private func appendRecord(_ record: CriminalRecord) {
+        guard !records.contains(where: { $0.id == record.id }) else { return }
+        records.append(record)
+        if records.count > 300 {
+            records.removeFirst(records.count - 300)
+        }
+        if record.type == "send_ban" {
+            deliverNotification(
+                title: "Send Ban",
+                body: "\(record.displayName) was blocked for 3 minutes."
+            )
+        }
+    }
+
     private func notify(for event: ButtonEvent) {
         switch event.type {
         case "press":
@@ -199,6 +218,8 @@ final class ReceiverStore: ObservableObject {
             deliverNotification(title: "The Nuke", body: event.text)
             NSApp.activate(ignoringOtherApps: true)
             onNuke?(event.displayName, event.nukeMessage)
+        case "sendBan":
+            deliverNotification(title: "Send Ban", body: event.text)
         default:
             break
         }

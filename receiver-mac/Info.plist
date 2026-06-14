@@ -10,6 +10,8 @@
   <string>The Receiver</string>
   <key>CFBundleDisplayName</key>
   <string>The Receiver</string>
+  <key>CFBundleIconFile</key>
+  <string>TheReceiverIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>

@@ -108,6 +108,9 @@ describe("The Button relay", () => {
 
     receiver.send(JSON.stringify({ type: "deleteDevice", deviceId: joined.device.deviceId }));
     expect((await nextOfType(site, "deleted")).deviceId).toBe(joined.device.deviceId);
+    const record = await nextOfType(receiver, "record");
+    expect(record.record.type).toBe("delete");
+    expect(record.record.deviceId).toBe(joined.device.deviceId);
 
     const afterDelete = await post(baseURL, "/api/events", {
       deviceId: joined.device.deviceId,
@@ -130,6 +133,9 @@ describe("The Button relay", () => {
     await nextOfType(receiver, "snapshot");
 
     receiver.send(JSON.stringify({ type: "banDevice", deviceId: joined.device.deviceId }));
+    const record = await nextOfType(receiver, "record");
+    expect(record.record.type).toBe("permanent_delete");
+    expect(record.record.deviceId).toBe(joined.device.deviceId);
     await nextOfType(receiver, "snapshot");
 
     const banned = await post(baseURL, "/api/devices", {
@@ -143,7 +149,7 @@ describe("The Button relay", () => {
     receiver.close();
   });
 
-  it("rate-limits button abuse", async () => {
+  it("send-bans button bursts and records the abuse", async () => {
     const { baseURL, wsBaseURL } = await startTestServer();
     const joined = await join(baseURL, "Alex");
     const receiver = await connectWS(`${wsBaseURL}/ws/receiver?token=receiver-token`);
@@ -156,16 +162,32 @@ describe("The Button relay", () => {
         receiver.send(JSON.stringify({ type: "eventReceived", eventId: payload.event.id }));
       }
     });
-    let lastStatus = 200;
-    for (let index = 0; index < 31; index += 1) {
+    for (let index = 0; index < 3; index += 1) {
       const result = await post(baseURL, "/api/events", {
         deviceId: joined.device.deviceId,
         deviceSecret: joined.deviceSecret,
         eventType: "press"
       });
-      lastStatus = result.status;
+      expect(result.status).toBe(200);
     }
-    expect(lastStatus).toBe(429);
+    const banned = await post(baseURL, "/api/events", {
+      deviceId: joined.device.deviceId,
+      deviceSecret: joined.deviceSecret,
+      eventType: "press"
+    });
+    expect(banned.status).toBe(429);
+    expect(banned.body.code).toBe("send_banned");
+    const event = await nextMatching(receiver, payload => payload.type === "event" && payload.event?.type === "sendBan", "sendBan event");
+    expect(event.record.type).toBe("send_ban");
+    expect(event.record.reason).toContain("More than 3 button presses");
+
+    const blockedMessage = await post(baseURL, "/api/messages", {
+      deviceId: joined.device.deviceId,
+      deviceSecret: joined.deviceSecret,
+      text: "still here"
+    });
+    expect(blockedMessage.status).toBe(429);
+    expect(blockedMessage.body.code).toBe("send_banned");
     receiver.close();
   });
 });
@@ -241,6 +263,32 @@ function nextOfType(socket, type) {
         if (sameTypeIndex >= 0) {
           socket.__messages.splice(sameTypeIndex, 1);
         }
+      }
+      resolve(payload);
+    };
+    socket.on("message", onMessage);
+  });
+}
+
+function nextMatching(socket, predicate, label) {
+  return new Promise((resolve, reject) => {
+    const existingIndex = socket.__messages.findIndex(predicate);
+    if (existingIndex >= 0) {
+      const [payload] = socket.__messages.splice(existingIndex, 1);
+      resolve(payload);
+      return;
+    }
+    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), 3000);
+    const onMessage = data => {
+      const payload = JSON.parse(String(data));
+      if (!predicate(payload)) {
+        return;
+      }
+      clearTimeout(timeout);
+      socket.off("message", onMessage);
+      const bufferedIndex = socket.__messages.findIndex(predicate);
+      if (bufferedIndex >= 0) {
+        socket.__messages.splice(bufferedIndex, 1);
       }
       resolve(payload);
     };

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="buttonFace" cx="38%" cy="28%" r="78%">
+      <stop offset="0%" stop-color="#ff4d4d"/>
+      <stop offset="36%" stop-color="#f51919"/>
+      <stop offset="72%" stop-color="#c61116"/>
+      <stop offset="100%" stop-color="#81080c"/>
+    </radialGradient>
+    <filter id="softShadow" x="-18%" y="-18%" width="136%" height="136%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="18"/>
+      <feOffset dx="0" dy="18" result="offsetblur"/>
+      <feFlood flood-color="#1a0000" flood-opacity="0.5"/>
+      <feComposite in2="offsetblur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="512" cy="512" r="402" fill="#4a080b" opacity="0.65"/>
+  <circle cx="512" cy="512" r="382" fill="#8a080c"/>
+  <circle cx="512" cy="512" r="365" fill="url(#buttonFace)" stroke="#ff3a3a" stroke-width="18" filter="url(#softShadow)"/>
+  <circle cx="512" cy="512" r="322" fill="none" stroke="#ff5a5a" stroke-opacity="0.2" stroke-width="10"/>
+  <text x="512" y="475" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif"
+        font-size="154" font-weight="900" fill="#ffffff">The</text>
+  <text x="512" y="630" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif"
+        font-size="154" font-weight="900" fill="#ffffff">Button</text>
+</svg>

@@ -20,6 +20,9 @@ const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGE_CHARS = 1200;
 const MAX_NUKE_MESSAGE_CHARS = 240;
 const RECEIVER_ACK_TIMEOUT_MS = 2500;
+const PRESS_BURST_LIMIT = 3;
+const PRESS_BURST_WINDOW_MS = 2000;
+const SEND_BAN_MS = 3 * 60 * 1000;
 
 export function createTheButtonServer(options = {}) {
   const store = options.store || createStoreFromEnv();
@@ -238,6 +241,30 @@ async function handleEvent(request, response, context) {
   }
 
   const now = new Date().toISOString();
+  if (isSendBanned(fresh, now)) {
+    sendJSON(response, { error: "This device is temporarily blocked from sending.", code: "send_banned" }, 429);
+    return;
+  }
+  if (eventType === "press" && shouldSendBanForPressBurst(fresh, now)) {
+    const record = addCriminalRecord(state, {
+      type: "send_ban",
+      deviceId: fresh.deviceId,
+      displayName: fresh.displayName,
+      reason: "More than 3 button presses in 2 seconds.",
+      until: new Date(Date.parse(now) + SEND_BAN_MS).toISOString()
+    });
+    fresh.sendBannedUntil = record.until;
+    const banEvent = pushEvent(state, {
+      type: "sendBan",
+      deviceId: fresh.deviceId,
+      displayName: fresh.displayName,
+      text: `${fresh.displayName} was send-banned for 3 minutes.`
+    });
+    await context.store.setState(state);
+    broadcastReceivers(context, { type: "event", event: banEvent, record, snapshot: receiverSnapshot(state, context) });
+    sendJSON(response, { error: "Too many button presses. This device is blocked from sending for 3 minutes.", code: "send_banned" }, 429);
+    return;
+  }
   fresh.lastSeenAt = now;
   fresh.lastIpHash = hashIP(ip, context.config);
   fresh.fingerprintHash = hashFingerprint(body?.clientFingerprint, context.config) || fresh.fingerprintHash;
@@ -286,6 +313,10 @@ async function handleMessage(request, response, context) {
   const device = state.devices[auth.device.deviceId];
   if (!device || device.status !== "active") {
     sendJSON(response, { error: "This device must request access again.", code: device?.status || "deleted" }, 409);
+    return;
+  }
+  if (isSendBanned(device, new Date().toISOString())) {
+    sendJSON(response, { error: "This device is temporarily blocked from sending.", code: "send_banned" }, 429);
     return;
   }
 
@@ -523,6 +554,12 @@ async function handleReceiverSocketMessage(socket, data, context) {
         fingerprintHash: device.fingerprintHash || "",
         createdAt: now
       });
+      const record = addCriminalRecord(state, {
+        type: "permanent_delete",
+        deviceId,
+        displayName: device.displayName,
+        reason: "Permanent Delete from Receiver."
+      });
       pushEvent(state, {
         type: "banned",
         deviceId,
@@ -531,9 +568,16 @@ async function handleReceiverSocketMessage(socket, data, context) {
       });
       sendToDevice(context, deviceId, { type: "banned", deviceId });
       closeDeviceSockets(context, deviceId);
+      broadcastReceivers(context, { type: "record", record });
     } else {
       device.status = "deleted";
       device.deletedAt = now;
+      const record = addCriminalRecord(state, {
+        type: "delete",
+        deviceId,
+        displayName: device.displayName,
+        reason: "Soft Delete from Receiver."
+      });
       pushEvent(state, {
         type: "deleted",
         deviceId,
@@ -542,6 +586,7 @@ async function handleReceiverSocketMessage(socket, data, context) {
       });
       sendToDevice(context, deviceId, { type: "deleted", deviceId });
       closeDeviceSockets(context, deviceId);
+      broadcastReceivers(context, { type: "record", record });
     }
     device.updatedAt = now;
     await context.store.setState(state);
@@ -580,6 +625,7 @@ function receiverSnapshot(state, context) {
     events: state.events.slice(-MAX_EVENTS),
     messages: state.messages.slice(-MAX_MESSAGES),
     bans: state.bans,
+    records: state.records.slice(-MAX_EVENTS),
     totals: {
       users: Object.keys(state.devices).length,
       online: [...context.siteSockets.keys()].length,
@@ -851,6 +897,38 @@ function nukeText(displayName, message) {
   return message ? `${displayName} has nuked you: ${message}` : `${displayName} has nuked you.`;
 }
 
+function shouldSendBanForPressBurst(device, now) {
+  const nowMs = Date.parse(now);
+  const recent = Array.isArray(device.recentPresses) ? device.recentPresses : [];
+  const windowed = recent
+    .map(value => Date.parse(value))
+    .filter(value => Number.isFinite(value) && nowMs - value < PRESS_BURST_WINDOW_MS);
+  if (windowed.length >= PRESS_BURST_LIMIT) {
+    device.recentPresses = [];
+    return true;
+  }
+  windowed.push(nowMs);
+  device.recentPresses = windowed.map(value => new Date(value).toISOString());
+  return false;
+}
+
+function isSendBanned(device, now) {
+  return Boolean(device.sendBannedUntil && Date.parse(device.sendBannedUntil) > Date.parse(now));
+}
+
+function addCriminalRecord(state, patch) {
+  const record = {
+    id: `rec_${randomID(12)}`,
+    createdAt: new Date().toISOString(),
+    ...patch
+  };
+  state.records.push(record);
+  while (state.records.length > MAX_EVENTS) {
+    state.records.shift();
+  }
+  return record;
+}
+
 function waitForReceiverEventAck(context, eventId) {
   if (context.receiverSockets.size === 0) {
     return Promise.resolve(false);
@@ -957,7 +1035,8 @@ export function normalizeState(value = {}) {
     devices: value.devices && typeof value.devices === "object" ? value.devices : {},
     events: Array.isArray(value.events) ? value.events : [],
     messages: Array.isArray(value.messages) ? value.messages : [],
-    bans: Array.isArray(value.bans) ? value.bans : []
+    bans: Array.isArray(value.bans) ? value.bans : [],
+    records: Array.isArray(value.records) ? value.records : []
   };
 }
 

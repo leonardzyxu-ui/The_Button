@@ -55,6 +55,15 @@ struct ContentView: View {
                 store.selectedDeviceID = requestDevices.first?.deviceId ?? store.selectedDeviceID
             }
             SidebarButton(
+                title: "Banned",
+                systemImage: "nosign",
+                selected: selectedSection == .banned,
+                badge: bannedCount
+            ) {
+                selectedSection = .banned
+                store.selectedDeviceID = store.bannedDevices.first?.deviceId ?? store.selectedDeviceID
+            }
+            SidebarButton(
                 title: "Conversations",
                 systemImage: "bubble.left.and.bubble.right",
                 selected: selectedSection == .conversations
@@ -112,6 +121,8 @@ struct ContentView: View {
             }
         case .requests:
             requestsView
+        case .banned:
+            bannedView
         case .conversations:
             conversationsView
         case .settings:
@@ -143,16 +154,14 @@ struct ContentView: View {
                 }
             }
 
-            Panel(title: "Conversations") {
+            Panel(title: "Criminal Records") {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(store.activeDevices) { device in
-                            ConversationRow(
-                                device: device,
-                                preview: lastPreview(for: device.deviceId),
-                                selected: store.selectedDeviceID == device.deviceId
-                            ) {
-                                store.selectedDeviceID = device.deviceId
+                        if store.records.isEmpty {
+                            EmptyPanelText("No records.")
+                        } else {
+                            ForEach(store.records.suffix(24).reversed()) { record in
+                                CriminalRecordRow(record: record)
                             }
                         }
                     }
@@ -196,7 +205,7 @@ struct ContentView: View {
                     }
                 }
 
-                Panel(title: "Permanent Delete History") {
+                Panel(title: "Recently Banned") {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             if store.bannedDevices.isEmpty {
@@ -225,6 +234,40 @@ struct ContentView: View {
                 }
             }
             .frame(minHeight: 290)
+
+            conversationPane
+        }
+    }
+
+    private var bannedView: some View {
+        VStack(spacing: 12) {
+            Panel(title: "Permanent Delete History") {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if store.bannedDevices.isEmpty {
+                            EmptyPanelText("No permanently deleted devices.")
+                        } else {
+                            ForEach(store.bannedDevices) { device in
+                                ModerationDeviceRow(
+                                    device: device,
+                                    selected: store.selectedDeviceID == device.deviceId,
+                                    primaryTitle: "Revive",
+                                    primarySystemImage: "arrow.uturn.backward.circle",
+                                    primaryAction: {
+                                        store.selectedDeviceID = device.deviceId
+                                        store.reviveSelected()
+                                    },
+                                    secondaryTitle: nil,
+                                    secondarySystemImage: nil,
+                                    secondaryAction: nil
+                                ) {
+                                    store.selectedDeviceID = device.deviceId
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             conversationPane
         }
@@ -330,6 +373,11 @@ struct ContentView: View {
         deletedCount
     }
 
+    private var bannedCount: Int? {
+        let count = store.bannedDevices.count
+        return count > 0 ? count : nil
+    }
+
     private var requestDevices: [ButtonDevice] {
         store.devices.filter { $0.status == "pending" || $0.status == "deleted" }
     }
@@ -342,6 +390,7 @@ struct ContentView: View {
 private enum ReceiverSection {
     case dashboard
     case requests
+    case banned
     case conversations
     case settings
 }
@@ -389,6 +438,10 @@ struct ReceiverSettingsView: View {
             Text(store.notificationStatus)
                 .foregroundStyle(.secondary)
             Text(store.connectionStatus)
+                .foregroundStyle(.secondary)
+
+            Text("Permanent Delete blocks saved browser identity plus matching IP/fingerprint signals. A different browser/VPN/private relay can still appear as a new pending request, but it cannot press, message, or Nuke unless approved.")
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .onAppear {
@@ -613,6 +666,61 @@ private struct EventRow: View {
             Divider()
         }
         .padding(.vertical, 8)
+    }
+}
+
+private struct CriminalRecordRow: View {
+    let record: CriminalRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(recordTitle)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(recordColor)
+                Spacer()
+                Text(shortTime(record.createdAt))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Text(record.reason)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            if let until = record.until {
+                Text("Blocked until \(shortTime(until))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Divider()
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var recordTitle: String {
+        switch record.type {
+        case "send_ban":
+            return "\(record.displayName) send-banned"
+        case "delete":
+            return "\(record.displayName) deleted"
+        case "permanent_delete":
+            return "\(record.displayName) permanently deleted"
+        default:
+            return "\(record.displayName) flagged"
+        }
+    }
+
+    private var recordColor: Color {
+        switch record.type {
+        case "send_ban":
+            return .orange
+        case "delete":
+            return .yellow
+        case "permanent_delete":
+            return .red
+        default:
+            return .primary
+        }
     }
 }
 
